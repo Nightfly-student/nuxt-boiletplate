@@ -1,42 +1,46 @@
 import { NuxtAuthHandler } from '#auth'
-import GoogleProvider from "next-auth/providers/google";
-import CredentialsProvider from "next-auth/providers/credentials";
+import { PrismaAdapter } from "@next-auth/prisma-adapter"
+import { prisma } from '~/server/db';
+import GithubProvider from 'next-auth/providers/github'
+import { getUserRolesByEmail } from '~/server/db/user';
+
 
 export default NuxtAuthHandler({
     secret: useRuntimeConfig().AUTH_SECRET,
+    adapter: PrismaAdapter(prisma),
     session: {
         strategy: 'jwt',
     },
-    jwt: {
-        maxAge: 60 * 60 * 24 * 30,
-    },
     providers: [
         // @ts-ignore: default does exist
-        GoogleProvider.default({
-            clientId: useRuntimeConfig().GOOGLE_CLIENT_ID,
-            clientSecret: useRuntimeConfig().GOOGLE_CLIENT_SECRET
-        }),
+        // GoogleProvider.default({
+        //     clientId: useRuntimeConfig().GOOGLE_CLIENT_ID,
+        //     clientSecret: useRuntimeConfig().GOOGLE_CLIENT_SECRET
+        // }),
         // @ts-ignore: default does exist
-        CredentialsProvider.default({
-            name: 'Credentials',
-            credentials: {},
-            async authorize(credentials: any) {
-                console.log('authorize', credentials);
-
-                return {
-                    id: 1,
-                    name: 'John Doe',
-                    email: 'johndoe@gmail.com'
-                };
-            }
-        })
+        GithubProvider.default({
+            clientId: useRuntimeConfig().GITHUB_CLIENT_ID,
+            clientSecret: useRuntimeConfig().GITHUB_CLIENT_SECRET
+        }),
     ],
     callbacks: {
-        signIn: async (params) => {
+        // If you want to use the role in client components
+        async session({ token, session }) {
+            if (token) {
+                session.user!.roles = token.roles
+            }
 
-            console.log('signIn', params);
+            return session
+        },
 
-            return true;
-        }
+        async jwt({ token }) {
+            const dbUser = await getUserRolesByEmail(token.email!)
+
+            if (dbUser) {
+                token.roles = dbUser
+            }
+
+            return token
+        },
     }
 });
